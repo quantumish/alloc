@@ -11,6 +11,7 @@ static void* alloc_last = NULL;
 struct alloc_data {
 	size_t size;
 	bool used;
+}
 
 /* struct freelist { */
 /*	void* next; */
@@ -66,18 +67,21 @@ void* find_next(size_t size)
 
 void* find_best(size_t size)
 {
-	intptr_t top = (intptr_t)sbrk(0);
+	void* top = sbrk(0);
+	printf("%p FOUND START vs HEAP START %p\n", (void*)top, heap_start);
 	int dist = INT32_MAX;
-	void* candidate = 0x0;
-	for (uint8_t* p = heap_start; (intptr_t) p < top;) {
+	void* candidate = NULL;
+	for (uint8_t* p = heap_start; p != top;) {
 		struct alloc_data metadata = *(struct alloc_data*) p;
+		printf("%p: %zu, %zu, %d, %d\n", p, metadata.size, metadata.size-size, dist, metadata.used);
 		if (metadata.size-size >= 0 && metadata.size-size < dist && metadata.used == false) {
 			dist = metadata.size-size;
 			candidate = p;
 		}
 		p += sizeof(struct alloc_data) + metadata.size;
 	}
-	return candidate;
+	if (candidate == NULL) return NULL;
+	return candidate+sizeof(struct alloc_data);
 }
 
 void* alloc(size_t size)
@@ -90,8 +94,12 @@ void* alloc(size_t size)
 	sbrk(alloc_size);
 	ptr = start;
 	if (ptr == (void*)-1) return NULL; // OOM
-	*(struct alloc_data*)ptr = (struct alloc_data) {.size = size, .used = true};
+	*(struct alloc_data*)ptr = (struct alloc_data) {.size = align(size), .used = true};
+	struct alloc_data metadata = *(struct alloc_data*) ptr;
+	printf("%zu, %zu\n", metadata.size, metadata.size-size);
+
 	ptr = ptr + sizeof(struct alloc_data);
+	printf("%p START\n", sbrk(0));
 	return ptr;
 }
 
@@ -103,7 +111,15 @@ void unalloc(void* ptr)
 
 int main()
 {
-	char* p = alloc(sizeof(char)*3);
-	strcpy(p, "hi");
+	void* thing = alloc(23);
+	printf("ALLOCATED PRE BLOCK\n");
+	char* p = alloc(sizeof(char)*4);
+	strcpy(p, "hi!");
+	printf("ALLOC'D STR %p\n", p);
 	unalloc(p);
+	unalloc(thing);
+	/* alloc(100); */
+	/* alloc(50); */
+	int* a = alloc(sizeof(int));
+	printf("%p\n", a);
 }
